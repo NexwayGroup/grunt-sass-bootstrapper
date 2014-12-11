@@ -2,6 +2,10 @@
 
 > Resolves dependency for SASS files and creates bootstrap file
 
+This module creates files (so-called bootstrap file) containing references to all files of type SASS/SCSS found in the project.
+
+Also, take into account the dependencies that exist between them. Where the SASS style requires a different file to work, you can use the keyword "#requires" which properly prepare the output file.
+
 ## Getting Started
 This plugin requires Grunt `~0.4.5`
 
@@ -47,14 +51,14 @@ Remove paths from importing values in final bootstrap file.
 Type: `String`
 Default value: `app/styles/bootstrap.sass`
 
-Ouput file (bootstrap file)
+Output file (bootstrap file) which will contains all 'imports' for collected files. Files that are already imported by SASS/SCSS will be ignored.
 
 #### options.requireKeyword
 Type: `String`
 Default value: `#requires`
 
-Look for this keyword in sass/scss files to create dependency. Pass name of dependent file in quotes after keyword. For example: // #requires "variables/fonts"
-Value should have same format as value of sass/scss @import. Place require keyword within comment.
+Module will look for this keyword in sass/scss files to create dependency. Pass name of dependent file in quotes after keyword. For example: `// #requires "variables/fonts"`
+Value should have same format as value of sass/scss `@import`. Place require keyword as a comment otherwise SASS compiler will throw an error.
 
 ### Usage Examples
 
