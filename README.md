@@ -1,7 +1,5 @@
 # grunt-sass-bootstrapper
 
-> Resolves dependency for SASS files and creates bootstrap file
-
 This module creates files (so-called bootstrap file) containing references to all files of type SASS/SCSS found in the project.
 
 Also, take into account the dependencies that exist between them. Where the SASS style requires a different file to work, you can use the keyword "#requires" which properly prepare the output file.
