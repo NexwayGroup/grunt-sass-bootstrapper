@@ -37,13 +37,13 @@ module.exports = function(grunt) {
     }
 
     /*
-     * Seeks given file for import keywords and DI keywords
-     * if DI keyword is found it push it to the global array
-     * import values are returned as an array.
+     * Parses the given file for import keywords and DI keywords
+     * if the DI keyword is found it pushes it to the global array.
+     * Import values are returned as an array.
      *
      * @importKeyword string sass import keyword
      * @requiresKeyword string dependency injection keyword
-     * @file string file to be seek
+     * @file string file to be parsed
      */
     function getKeywordsValues(importKeyword, requiresKeyword, file) {
         var values = [];
@@ -81,8 +81,8 @@ module.exports = function(grunt) {
     }
 
     /*
-     * Get root folder name from path. If path
-     * is only a filename it will return '*root*' string
+     * Retrieve the root folder name from its path.
+     * If path is only a filename it will return '*root*' string
      * as a result.
      *
      * @path string path to get its root folder
@@ -97,7 +97,7 @@ module.exports = function(grunt) {
 
     /*
      * Removes array of string items which contains
-     * given string
+     * the given string.
      *
      * @fileList array an array to be cleaned
      * @cleanPath string path to find. must be cleaned first
@@ -122,7 +122,7 @@ module.exports = function(grunt) {
     }
 
     /*
-     * Method which parse all files from an array.
+     * Method which parses all the files.
      * It cleans list from files which are already
      * being imported and stores DI list into global array (DIList).
      *
@@ -154,7 +154,7 @@ module.exports = function(grunt) {
 
     /*
      * Returns array of all dependencies for a given file.
-     * If there is no DI for given file, returns empty array.
+     * If there is no DI for a given file, returns empty array.
      *
      * @fileName string file name for which DIs must be returned
      */
