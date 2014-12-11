@@ -17,7 +17,7 @@ Once the plugin has been installed, it may be enabled inside your Gruntfile with
 grunt.loadNpmTasks('grunt-sass-bootstrapper');
 ```
 
-## The "sassdepress" task
+## The "sass_bootstrapper" task
 
 ### Overview
 In your project's Gruntfile, add a section named `sassdepress` to the data object passed into `grunt.initConfig()`.
