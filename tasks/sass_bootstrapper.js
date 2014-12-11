@@ -1,11 +1,11 @@
 /*
  * grunt-sass-bootstrapper
- * https://github.com/mkatanski/grunt-sassdepress
+ * https://github.com/NexwayGroup/grunt-sass-bootstrapper
  *
  * Copyright (c) 2014 Nexway Lab.
  * Licensed under the MIT license.
  *
- * @author Michal Katanski <mkatanski@nexway.com>
+ * @author Michał Katański <mkatanski@nexway.com>
  */
 
 'use strict';
@@ -14,8 +14,7 @@ var nodePath = require('path');
 
 module.exports = function(grunt) {
 
-
-    var DIList = [];
+    var DIList  = [];
     var options = null;
 
     /*
@@ -276,7 +275,6 @@ module.exports = function(grunt) {
 
         // Iterate over all specified file groups.
         this.files.forEach(function(f) {
-
 
             if (grunt.file.exists(options.bootstrapFile)) {
                 grunt.file.delete(options.bootstrapFile);
