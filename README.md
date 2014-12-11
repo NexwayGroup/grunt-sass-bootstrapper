@@ -24,7 +24,7 @@ grunt.loadNpmTasks('grunt-sass-bootstrapper');
 ## The "sass_bootstrapper" task
 
 ### Overview
-In your project's Gruntfile, add a section named `sassdepress` to the data object passed into `grunt.initConfig()`.
+In your project's Gruntfile, add a section named `sass_bootstrapper` to the data object passed into `grunt.initConfig()`.
 
 ```js
 grunt.initConfig({
