@@ -1,4 +1,4 @@
-/*
+/**
  * grunt-sass-bootstrapper
  * https://github.com/NexwayGroup/grunt-sass-bootstrapper
  *
@@ -10,44 +10,73 @@
 
 'use strict';
 
-var nodePath = require('path');
+var Path = require('path');
 
 module.exports = function(grunt) {
 
-    var DIList  = [];
-    var options = null;
+    var diList          = [],
+        options         = null,
+        pathSeparator   = '/',
+        newLineSymbol   = '\n';
 
-    /*
-     * Returns sass or scss file path without its extension
-     * and without first occurence of underscore character ('_')
-     * in filename.
+    /**
+     * Remove item by its index and place it to another position
      *
-     * @path string path to be cleaned
+     * @param indexToReplace {number} current item position
+     * @param indexToInsert {number} index where item should be placed
      */
-    function cleanFilePath(path) {
-        var elements = path.split("/");
-
-        if (elements[elements.length - 1].indexOf('_') == 0) {
-            elements[elements.length - 1] = elements[elements.length - 1].replace('_', '');
-        }
-        elements[elements.length - 1] = elements[elements.length - 1].replace('.sass', '');
-        elements[elements.length - 1] = elements[elements.length - 1].replace('.scss', '');
-
-        return elements.join("/");
+    Array.prototype.replace = function(indexToReplace, indexToInsert) {
+        var removedArray = this.splice(indexToReplace, 1);
+        this.splice(indexToInsert, 0, removedArray[0]);
     }
 
-    /*
+    /**
+     * Retrieve the root folder name from path.
+     * If path is only a filename it will return '*root*' string
+     * as a result.
+     *
+     * @returns {string} Parsed root folder
+     */
+    String.prototype.parseRootFolder = function() {
+        var parts = this.split(pathSeparator);
+        if (parts.length > 1) {
+            return parts[0];
+        }
+        return '*root*';
+    }
+
+    /**
+     * Convert file path into sass format
+     *
+     * @returns {string} sass formated path
+     */
+    String.prototype.toSassFormat = function() {
+        var elements  = this.split(pathSeparator),
+            fileIndex = elements.length - 1,
+            fileName  = elements[fileIndex],
+            extension = Path.extname(fileName);
+
+        if (fileName.indexOf('_') === 0) {
+            fileName = fileName.replace('_', '');
+        }
+
+        elements[fileIndex] = fileName.replace(extension, '');
+        return elements.join(pathSeparator);
+    }
+
+    /**
      * Parses the given file for import keywords and DI keywords
-     * if the DI keyword is found it pushes it to the global array.
+     * if the DI keyword is found it pushes it to the global array (diList).
      * Import values are returned as an array.
      *
-     * @importKeyword string sass import keyword
-     * @requiresKeyword string dependency injection keyword
-     * @file string file to be parsed
+     * @param importKeyword {string} sass import keyword
+     * @param requiresKeyword {string} dependency injection keyword
+     * @param filePath {string} file to be parsed
+     * @returns {Array} list of all founded import values
      */
-    function getKeywordsValues(importKeyword, requiresKeyword, file) {
-        var values = [];
-        var lines = grunt.file.read(file).split("\n");
+    function getKeywordsValues(importKeyword, requiresKeyword, filePath) {
+        var values  = [],
+            lines   = grunt.file.read(filePath).split(newLineSymbol);
 
         // Search for keywords
         for (var i = lines.length - 1; i >= 0; i--) {
@@ -71,8 +100,8 @@ module.exports = function(grunt) {
                 };
 
                 // check if DI object exists. If not add new one
-                if (searchObjectInDI(DIObject) == -1) {
-                    DIList.push(DIObject);
+                if (searchObjectInDI(DIObject) === -1) {
+                    diList.push(DIObject);
                 }
             }
         }
@@ -80,40 +109,26 @@ module.exports = function(grunt) {
         return values;
     }
 
-    /*
-     * Retrieve the root folder name from its path.
-     * If path is only a filename it will return '*root*' string
-     * as a result.
+    /**
+     * Search for given path formatted as sass path in files list
+     * and removes it form list if found
      *
-     * @path string path to get its root folder
+     * @param fileList {array} list of paths to be search in
+     * @param sassPath {string} sass path to search for
+     * @returns {array} list of paths
      */
-    function getRootFolder(path) {
-        var parts = path.split("/");
-        if (parts.length > 1) {
-            return parts[0];
-        }
-        return '*root*';
-    }
-
-    /*
-     * Removes array of string items which contains
-     * the given string.
-     *
-     * @fileList array an array to be cleaned
-     * @cleanPath string path to find. must be cleaned first
-     */
-    function removeArrayItemByPath(fileList, cleanPath) {
-        var i = -1;
-        var seek = true;
+    function removeArrayItemByPath(fileList, sassPath) {
+        var index = -1,
+            seek  = true;
 
         while (seek) {
-            i++;
+            index++;
 
-            if (cleanFilePath(fileList[i]).indexOf(cleanPath) != -1) {
-               fileList.splice(i, 1);
+            if (fileList[index].toSassFormat().indexOf(sassPath) != -1) {
+               fileList.splice(index, 1);
             }
 
-            if (i >= fileList.length - 1) {
+            if (index >= fileList.length - 1) {
                 seek = false;
             }
         }
@@ -121,110 +136,102 @@ module.exports = function(grunt) {
         return fileList;
     }
 
-    /*
-     * Method which parses all the files.
-     * It cleans list from files which are already
-     * being imported and stores DI list into global array (DIList).
-     *
-     * @fileList array list of files to be parsed
-     */
-    function parseFiles(fileList) {
-        var pass = true;
-
-        while (pass) {
-            pass = false;
-
-            for (var index = 0; index < fileList.length; index++) {
-                // get import values from file as an array and add DI values to the DIList array.
-                var kValues = getKeywordsValues(options.importKeyword, options.requireKeyword, fileList[index]);
-                var curLength = fileList.length;
-
-                for (var i = kValues.length - 1; i >= 0; i--) {
-                    fileList = removeArrayItemByPath(fileList, kValues[i]);
-                    // Check if size of an array has changed
-                    if (curLength > fileList.length) {
-                        pass = true;
-                    }
-                }
-            }
-        }
-
-        return fileList;
-    }
-
-    /*
+    /**
      * Returns array of all dependencies for a given file.
      * If there is no DI for a given file, returns empty array.
      *
-     * @fileName string file name for which DIs must be returned
+     * @param fileName {string} file name for which DIs must be returned
+     * @returns {Array} list of all dependencies for a file
      */
     function getDIByFilename(fileName) {
-        var returnArray = [];
-        var length = DIList.length;
+        var returnArray     = [],
+            length          = diList.length;
 
         for (var i = 0; i < length; i++) {
-            if (DIList[i]['fileName'] == fileName) {
-                returnArray.push(DIList[i]['requires']);
+            if (diList[i]['fileName'] === fileName) {
+                returnArray.push(diList[i]['requires']);
             }
         }
-
         return returnArray;
     }
 
-    /*
+    /**
      * Search for specific DI Object in DI List.
      * Method returns index position when DI object
      * exists in array or '-1' when its not found.
      *
-     * @DIObject object DI object to find
+     * @param DIObject {object} DI object to find
+     * @returns {number} index of DI object in diList, -1 if not found
      */
     function searchObjectInDI(DIObject) {
-        for (var i = DIList.length - 1; i >= 0; i--) {
-            if (DIList[i].requires == DIObject.requires &&
-                DIList[i].fileName == DIObject.fileName)
+        for (var i = diList.length - 1; i >= 0; i--) {
+            if (diList[i].requires === DIObject.requires &&
+                diList[i].fileName === DIObject.fileName)
                 return i;
         }
-
         return -1;
     }
 
-    /*
-     * Search for path in list. Path should be clean.
-     * Use cleanFilePath method to clean path.
+    /**
+     * Search for path in list. Path should be sass formated.
+     * Use toSassFormat prototyped method to format path.
      *
-     * @cleanPath string clean path
-     * @list array list of files
+     * @param sassPath {string} sass formated path
+     * @param fileList {array} list of files
+     * @returns {number} index of file in given file list, -1 if not found
      */
-    function searchInList(cleanPath, list) {
-        for (var i = list.length - 1; i >= 0; i--) {
-            if (cleanFilePath(list[i]).indexOf(cleanPath) > -1) {
+    function searchInList(sassPath, fileList) {
+        for (var i = fileList.length - 1; i >= 0; i--) {
+            if (fileList[i].toSassFormat().indexOf(sassPath) > -1) {
                 return i;
             }
         }
         return -1;
     }
 
-    /*
-     * Get item in array by its index and move it before
-     * another item.
+    /**
+     * Parses all the files in given file list.
+     * It cleans file list from files which are already
+     * being imported and stores DI list into global array (diList).
      *
-     * @fileList array list of files
-     * @indexToReplace int index of item to be moved
-     * @indexToInsert int index where item should be placed
+     * @param fileList {array} list of files to be parsed
+     * @returns {array} parsed file list
      */
-    function replaceInArray(fileList, indexToReplace, indexToInsert) {
-        var removedArr = fileList.splice(indexToReplace, 1);
-        fileList.splice(indexToInsert, 0, removedArr[0]);
+    function parseFiles(fileList) {
+        var doPass = true;
+
+        while (doPass) {
+            doPass = false;
+
+            for (var fIndex = 0; fIndex < fileList.length; fIndex++) {
+                // get import values from file as an array and add DI
+                // values to the diList array.
+                var curLength   = fileList.length,
+                    kValues     = getKeywordsValues(options.importKeyword,
+                                                    options.requireKeyword,
+                                                    fileList[fIndex]);
+
+                for (var kIndex = kValues.length - 1; kIndex >= 0; kIndex--) {
+                    fileList = removeArrayItemByPath(fileList, kValues[kIndex]);
+                    // Check if size of an array has changed
+                    if (curLength > fileList.length) {
+                        doPass = true;
+                    }
+                }
+
+            } // end for
+        } // end while
 
         return fileList;
     }
 
-    /*
+    /**
      * Reorders files in a given list by their dependencies.
-     * Dependencies are taken from DIList which has to be
+     * Dependencies are taken from diList which has to be
      * generated first.
      *
-     * @fileList array list of files to be reordered
+     * @param fileList {array} list of files
+     * @returns {array} list of files
      */
     function orderByDependency(fileList) {
         var doPass = true;
@@ -237,41 +244,100 @@ module.exports = function(grunt) {
 
             // Iterate through every file in the list and check its
             // dependency (requirements)
-            for (var i = fileList.length - 1; i >= 0; i--) {
+            for (var fIndex = fileList.length - 1; fIndex >= 0; fIndex--) {
                 // Get all dependencies for current file
-                var DIs = getDIByFilename(fileList[i]);
+                var dependencies = getDIByFilename(fileList[fIndex]);
 
-                if (DIs.length > 0) {
+                if (dependencies.length > 0) {
+
                     // for each file that is required by current file
-                    for (var DIIndex = 0; DIIndex < DIs.length; DIIndex++) {
-                        var requires = DIs[DIIndex];
-                        // Index of file that is required by current file
-                        var reqFileindex = searchInList(requires, fileList);
+                    for (var diIndex = 0; diIndex < dependencies.length; diIndex++) {
+                        var requires        = dependencies[diIndex],
+                            reqFileindex    = searchInList(requires, fileList);
 
-                        if (reqFileindex < i) {
+                        if (reqFileindex < fIndex) {
                             // Remove file from current index and insert
                             // it before file that requires this file.
-                            fileList = replaceInArray(fileList, reqFileindex, i);
+                            fileList.replace(reqFileindex, fIndex);
                             // Replacing procedure occured so do one more pass.
                             doPass = true;
                         }
-                    }
-                }
-            }
-        }
+
+                    } // end for
+
+                } // end if
+            } // end for
+        } // end while
 
         // Return reordered file list
         return fileList;
     }
 
+    /**
+     * Generate content for bootstrap file
+     *
+     * @param fileList {array} list of files to import by bootstrap file
+     * @param lineDelimiter {string} symbol at the end of the line
+     * @returns {string} formatted file content
+     */
+    function generateBootstrapContent(fileList, lineDelimiter) {
+        var bootstrapContent    = '',
+            folderGroup         = '';
+
+        for (var fIndex = fileList.length - 1; fIndex >= 0; fIndex--) {
+            var filePath = fileList[fIndex];
+
+            // remove root paths
+            for (var rpIndex = 0; rpIndex < options.filterRootPaths.length; rpIndex++) {
+                var rootPath = options.filterRootPaths[rpIndex];
+                // check if path ends by path separator. If not append path separator to path.
+                if(rootPath.substr(-1) != pathSeparator) {
+                    rootPath += pathSeparator;
+                }
+                filePath = filePath.replace(rootPath, '');
+            }
+
+            // convert file path to sass format
+            filePath        = filePath.toSassFormat();
+            var currentRoot = filePath.parseRootFolder();
+
+            // if current root folder has changed, write new root folder
+            // as a comment and set new current folder
+            if (folderGroup != currentRoot) {
+                bootstrapContent   += newLineSymbol + '// ' + currentRoot + newLineSymbol;
+                folderGroup         = currentRoot;
+            }
+
+            // append import line
+            bootstrapContent += options.importKeyword + ' "' + filePath + '"' + lineDelimiter + newLineSymbol;
+        }
+
+        return bootstrapContent;
+    }
+
     grunt.registerMultiTask('sass_bootstrapper', 'Resolves dependency for SASS files and creates bootstrap file', function() {
         // Merge task-specific and/or target-specific options with these defaults.
         options = this.options({
-            filterRootPaths: ['app/styles/', 'bower_components/'],
-            bootstrapFile: 'app/styles/bootstrap.sass',
-            importKeyword: '@import',
-            requireKeyword: '#requires'
+            filterRootPaths:    ['app/styles/', 'bower_components/'],
+            bootstrapFile:      'app/styles/bootstrap.sass',
+            requireKeyword:     '#requires'
         });
+
+        var fileList            = [],
+            lineDelimiter       = ';',
+            bootstrapContent    = '// This file has been generated by grunt-sass-bootstrapper. \n' +
+                                  '// A SASS/SCSS Dependency resolver module.\n';
+
+        options.importKeyword = '@import';
+
+        if (options.importKeyword === options.requireKeyword) {
+            grunt.fail.fatal('Using "@import" as requireKeyword name is depracated');
+        }
+
+        // If output file is sass, clear line delimiter.
+        if (Path.extname(options.bootstrapFile) === '.sass') {
+            lineDelimiter = '';
+        }
 
         // Iterate over all specified file groups.
         this.files.forEach(function(f) {
@@ -281,52 +347,25 @@ module.exports = function(grunt) {
                 grunt.log.writeln('File "' + options.bootstrapFile + '" deleted.');
             }
 
-            var fileList = [];
-
-            // Concat specified files.
-            f.src.filter(function(filepath) {
+            // Insert all files into array.
+            f.src.filter(function(filePath) {
                 // Warn on and remove invalid source files (if nonull was set).
-                if (!grunt.file.exists(filepath)) {
-                    grunt.log.warn('Source file "' + filepath + '" not found.');
+                if (!grunt.file.exists(filePath)) {
+                    grunt.log.warn('Source file "' + filePath + '" not found.');
                     return false;
                 } else {
                     return true;
                 }
-            }).map(function(filepath) {
-                // Read file source.
-                fileList.unshift(filepath);
+            }).map(function(filePath) {
+                // Add file path to the list.
+                fileList.unshift(filePath);
                 return true;
             });
 
             // Parse imports and DIs and order file by their dependency
             fileList = orderByDependency(parseFiles(fileList));
 
-            var bootstrapContent = '// This file has been generated by grunt-sass-bootstrapper. \n// A SASS/SCSS Dependency resolver module.\n';
-            var folderGroup = '';
-
-            for (var i = fileList.length - 1; i >= 0; i--) {
-                var filePath = fileList[i];
-
-                // remove root paths
-                for (var rpIndex = 0; rpIndex < options.filterRootPaths.length; rpIndex++) {
-                    var normalizedPath = nodePath.normalize(options.filterRootPaths[rpIndex]);
-                    if(normalizedPath.substr(-1) != '/') {
-                        normalizedPath += '/';
-                    }
-                    filePath = filePath.replace(normalizedPath, '');
-                }
-                // clean path
-                filePath = cleanFilePath(filePath);
-
-                var curRoot = getRootFolder(filePath);
-
-                if (folderGroup != curRoot) {
-                    bootstrapContent += '\n' + '// ' + curRoot + '\n';
-                    folderGroup = curRoot;
-                }
-
-                bootstrapContent += options.importKeyword + ' "' + filePath + '"\n';
-            };
+            bootstrapContent += generateBootstrapContent(fileList, lineDelimiter);
 
             // Write the destination file.
             grunt.file.write(options.bootstrapFile, bootstrapContent);
