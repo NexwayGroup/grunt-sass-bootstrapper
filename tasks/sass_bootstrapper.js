@@ -17,7 +17,7 @@ module.exports = function(grunt) {
     var diList          = [],
         options         = null,
         pathSeparator   = '/',
-        newLineSymbol   = '\n';
+        newLineSymbol   = grunt.util.linefeed;
 
     /**
      * Remove item by its index and place it to another position
@@ -94,19 +94,56 @@ module.exports = function(grunt) {
                 // DI keywords.
 
                 // Create new dependency object
-                var DIObject = {
+                var diObject = {
                     requires: line.match(/"(.*?)"/)[1],
-                    fileName: file
+                    fileName: filePath
                 };
 
+                // search for require loop
+                // it happens when two files requires each other
+                var loopFiles = findRequireLoop(diObject);
+                if (loopFiles !== null) {
+                    // throw a fatal error
+                    grunt.fail.fatal('Require loop detected!!! \n' +
+                                     'Files that have require loop: \n' +
+                                     loopFiles.currentFile + '\n' +
+                                     loopFiles.foundedFile);
+                }
+
                 // check if DI object exists. If not add new one
-                if (searchObjectInDI(DIObject) === -1) {
-                    diList.push(DIObject);
+                if (searchObjectInDI(diObject) === -1) {
+                    diList.push(diObject);
                 }
             }
         }
 
         return values;
+    }
+
+    /**
+     * Check if require loop exists for given diObject. If loop is found
+     * return files that cause a problem as an object.
+     *
+     * @param diObject {object} Dependency Injection object
+     * @returns {object} array with files that requires each other or null
+     */
+    function findRequireLoop(diObject) {
+        var curFileName = diObject.fileName.toSassFormat(),
+            curRequires = diObject.requires;
+
+        for (var dIndex = diList.length - 1; dIndex >= 0; dIndex--) {
+            var diFileName = diList[dIndex].fileName.toSassFormat(),
+                diRequires = diList[dIndex].requires;
+
+            if (diFileName.match(curRequires) !== null &&
+                curFileName.match(diRequires) !== null) {
+                return {
+                    currentFile: diObject.fileName,
+                    foundedFile: diList[dIndex].fileName
+                };
+            }
+        }
+        return null;
     }
 
     /**
@@ -124,7 +161,7 @@ module.exports = function(grunt) {
         while (seek) {
             index++;
 
-            if (fileList[index].toSassFormat().indexOf(sassPath) != -1) {
+            if (fileList[index].toSassFormat().match(sassPath) !== null) {
                fileList.splice(index, 1);
             }
 
@@ -182,7 +219,8 @@ module.exports = function(grunt) {
      */
     function searchInList(sassPath, fileList) {
         for (var i = fileList.length - 1; i >= 0; i--) {
-            if (fileList[i].toSassFormat().indexOf(sassPath) > -1) {
+            //grunt.log.writeln(fileList[i].toSassFormat().match(sassPath));
+            if (fileList[i].toSassFormat().match(sassPath) !== null) {
                 return i;
             }
         }
@@ -255,7 +293,7 @@ module.exports = function(grunt) {
                         var requires        = dependencies[diIndex],
                             reqFileindex    = searchInList(requires, fileList);
 
-                        if (reqFileindex < fIndex) {
+                        if (reqFileindex > -1 && reqFileindex < fIndex) {
                             // Remove file from current index and insert
                             // it before file that requires this file.
                             fileList.replace(reqFileindex, fIndex);
