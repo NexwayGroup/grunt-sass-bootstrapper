@@ -1,8 +1,28 @@
 # grunt-sass-bootstrapper
 
-This module creates files (so-called bootstrap file) containing references to all files of type SASS/SCSS found in the project.
+This module create file (so-called bootstrap file) containing references to all files of type SASS/SCSS found in the project.
 
-Also, take into account the dependencies that exist between them. Where the SASS style requires a different file to work, you can use the keyword "#requires" which properly prepare the output file.
+Also, it takes into account the dependencies that exist between them. Whether the SASS style requires a different file to work, you can use the keyword "#requires" and pass required dependency to properly prepare the output file.
+
+Files that are already imported will be skipped. 
+
+So for example if You have 3 files:
+```
+styles/main.scss
+styles/partials/_variables.scss
+styles/partials/_mixins.scss
+```
+and `_variables.scss` is being imported by `_mixins.scss`, the output file (bootstrap) will consists of:
+```
+@import "main"
+@import "partials/mixins"
+```
+
+However if we add a `// #required "partials/mixins"` to the `main.scss` file the order of imports will change to the:
+```
+@import "partials/mixins"
+@import "main"
+```
 
 ## Getting Started
 This plugin requires Grunt `~0.4.5`
@@ -43,19 +63,19 @@ grunt.initConfig({
 Type: `array`
 Default value: ['app/styles', 'bower_components']
 
-Remove paths from importing values in final bootstrap file.
+Removes parts of the paths in @import values in final bootstrap file.
 
 #### options.bootstrapFile
 Type: `String`
 Default value: `app/styles/bootstrap.sass`
 
-Output file (bootstrap file) which will contains all 'imports' for collected files. Files that are already imported by SASS/SCSS will be ignored.
+Output file (bootstrap file) which will contains all `@imports` for collected files. Files that are already imported by SASS/SCSS will be ignored.
 
 #### options.requireKeyword
 Type: `String`
 Default value: `#requires`
 
-Module will look for this keyword in sass/scss files to create dependency. Pass name of dependent file in quotes after keyword. For example: `// #requires "variables/fonts"`
+Module will look for this keyword in sass/scss files to create dependency. Pass the name of required file in quotes after keyword. For example: `// #requires "variables/fonts"`
 Value should have same format as value of sass/scss `@import`. Place require keyword as a comment otherwise SASS compiler will throw an error.
 
 ### Usage Examples
