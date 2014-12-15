@@ -8,27 +8,44 @@
  * @author Michał Katański <mkatanski@nexway.com>
  */
 
-'use strict';
-
-var Path = require('path');
+var Path    = require('path'),
+    Fs      = require('fs');
 
 module.exports = function(grunt) {
+    'use strict';
 
-    var diList          = [],
-        options         = null,
-        pathSeparator   = '/',
-        newLineSymbol   = grunt.util.linefeed;
+    var options             = null,
+        PATH_SEP            = '/',
+        NEW_LINE            = '\n',
+        MODULE_NAME         = 'sass_bootstrapper',
+        MODULE_DESC         = 'Resolves dependency for SASS files and creates bootstrap file',
+        mainPartialList     = {};
 
     /**
-     * Remove item by its index and place it to another position
+     * Convert file path into sass format
      *
-     * @param indexToReplace {number} current item position
-     * @param indexToInsert {number} index where item should be placed
+     * @returns {string} sass formated path
      */
-    Array.prototype.replace = function(indexToReplace, indexToInsert) {
-        var removedArray = this.splice(indexToReplace, 1);
-        this.splice(indexToInsert, 0, removedArray[0]);
-    }
+    String.prototype.toSassFormat = function() {
+        var _dir        = Path.dirname(this),
+            _fileName   = Path.basename(this);
+
+        if (_fileName.indexOf('_') === 0) {
+            _fileName = _fileName.replace('_', '');
+        }
+
+        return _dir + PATH_SEP + _fileName;
+    };
+
+    /**
+     * Convert sass path to regular path
+     *
+     * @returns {string} sass formated path
+     */
+    String.prototype.sassToPath = function() {
+        var _index = this.lastIndexOf(PATH_SEP) + 1;
+        return [this.slice(0, _index), '_', this.slice(_index)].join('');
+    };
 
     /**
      * Retrieve the root folder name from path.
@@ -38,322 +55,242 @@ module.exports = function(grunt) {
      * @returns {string} Parsed root folder
      */
     String.prototype.parseRootFolder = function() {
-        var parts = this.split(pathSeparator);
-        if (parts.length > 1) {
-            return parts[0];
+        var _parts = this.split(PATH_SEP);
+        if (_parts.length > 1) {
+            return _parts[0];
         }
         return '*root*';
+    };
+
+    /**
+     * Remove given root folders from file path.
+     *
+     * @rootFolders {array} Root folders to remove from path
+     * @returns {string} Cleared path
+     */
+    String.prototype.removeRootFolders = function(rootFolders) {
+        var _this   = this,
+            _return = '';
+        rootFolders.forEach(function(rootFolder) {
+            if(rootFolder.substr(-1) != PATH_SEP) {
+                rootFolder += PATH_SEP;
+            }
+            var cleared = _this.replace(rootFolder, '');
+            if (cleared !== _this) {
+                _return = cleared;
+            }
+        });
+        return _return;
+    };
+
+    /**
+     * Find position of an array element when callback function
+     * return true.
+     *
+     * @param array {array} Array to seek
+     * @param callback {function} Callback function to test element
+     * @returns {number} Index of eleement or -1 if not found
+     */
+    function findIndexInArray(array, callback){
+        var _length = array.length;
+        for (var i = 0; i < _length; i++) {
+            if (callback(array[i])) return i;
+        }
+        return -1;
     }
 
     /**
-     * Convert file path into sass format
+     * Remove item by its index and place it to another position
      *
-     * @returns {string} sass formated path
+     * @param indexToReplace {number} current item position
+     * @param indexToInsert {number} index where item should be placed
      */
-    String.prototype.toSassFormat = function() {
-        var elements  = this.split(pathSeparator),
-            fileIndex = elements.length - 1,
-            fileName  = elements[fileIndex],
-            extension = Path.extname(fileName);
+    function replaceInArray(array, indexToReplace, indexToInsert) {
+        var _removedArray = array.splice(indexToReplace, 1);
+        array.splice(indexToInsert, 0, _removedArray[0]);
+        return array;
+    }
 
-        if (fileName.indexOf('_') === 0) {
-            fileName = fileName.replace('_', '');
+    /**
+     * Remove partials that are imported by another sass/scss files
+     *
+     * @param partials {object} copy of mainPartialList
+     */
+    function clearImports(partials) {
+        for (var partialName in partials) {
+            var _imports = partials[partialName].imports;
+
+            for (var index in _imports) {
+                var _partialToRemove = _imports[index];
+
+                // remove file from list
+                delete mainPartialList[_partialToRemove];
+            } // end in imports
+        }// end in files
+    }
+
+    /**
+     * Get array of partial names from mainPartialList
+     *
+     * @returns {Array} Array of partials
+     */
+    function getArrayOfPartials() {
+        var _partialsArr  = [];
+        for (var file in mainPartialList)
+        {
+            if (mainPartialList.hasOwnProperty(file))
+            {
+                _partialsArr.push(file);
+            }
         }
-
-        elements[fileIndex] = fileName.replace(extension, '');
-        return elements.join(pathSeparator);
+        return _partialsArr;
     }
 
     /**
      * Parses the given file for import keywords and DI keywords
-     * if the DI keyword is found it pushes it to the global array (diList).
-     * Import values are returned as an array.
      *
      * @param importKeyword {string} sass import keyword
      * @param requiresKeyword {string} dependency injection keyword
      * @param filePath {string} file to be parsed
-     * @returns {Array} list of all founded import values
+     * @returns {Object} list of all founded import values
      */
-    function getKeywordsValues(importKeyword, requiresKeyword, filePath) {
-        var values  = [],
-            lines   = grunt.file.read(filePath).split(newLineSymbol);
+    function parseFile(importKeyword, requiresKeyword, filePath) {
+        var _lines   = grunt.file.read(filePath).split(NEW_LINE),
+            _values  = {
+                imports: {},
+                requires: {}
+            };
 
-        // Search for keywords
-        for (var i = lines.length - 1; i >= 0; i--) {
-            var line = lines[i];
+        // Search for keywords in file
+        for (var i = _lines.length - 1; i >= 0; i--) {
+            var line = _lines[i];
 
-            if (line.indexOf(importKeyword) > -1) {
-                // importKeyword found. Push its value to the values array
-                values.push(line.match(/"(.*?)"/)[1]);
+            if (line.indexOf(importKeyword) !== -1) {
+                // get import value
+                var _importValue = line.match(/"(.*?)"/)[1];
+
+                // Create full path to help looking for file and minimalize
+                // errors if there are duplicated filenames
+                _importValue = Path.join(Path.dirname(filePath), _importValue.sassToPath());
+                // Windows support. Replace backslashes into slashes.
+                _importValue = _importValue.replace(/\\/g, "/");
+                // Append new import value to list
+                _values.imports['import' + i] = _importValue;
             }
 
-            if (line.indexOf(requiresKeyword) > -1) {
-                // requiresKeyword found !!
-                // push it to global array. This way it will not be
-                // required to parse the same file twice to look for 
-                // DI keywords.
+            if (line.indexOf(requiresKeyword) !== -1) {
+                // get require value
+                var _requireValue = line.match(/"(.*?)"/)[1];
 
                 // Create new dependency object
-                var diObject = {
-                    requires: line.match(/"(.*?)"/)[1],
+                var _requireObject = {
+                    requires: _requireValue.sassToPath(),
                     fileName: filePath
                 };
-
-                // search for require loop
-                // it happens when two files requires each other
-                var loopFiles = findRequireLoop(diObject);
-                if (loopFiles !== null) {
-                    // throw a fatal error
-                    grunt.fail.fatal('Require loop detected!!! \n' +
-                                     'Files that have require loop: \n' +
-                                     loopFiles.currentFile + '\n' +
-                                     loopFiles.foundedFile);
-                }
-
-                // check if DI object exists. If not add new one
-                if (searchObjectInDI(diObject) === -1) {
-                    diList.push(diObject);
-                }
+                // Append new require value to list
+                _values.requires['require' + i] = _requireObject;
             }
         }
-
-        return values;
+        return _values;
     }
 
     /**
-     * Check if require loop exists for given diObject. If loop is found
-     * return files that cause a problem as an object.
-     *
-     * @param diObject {object} Dependency Injection object
-     * @returns {object} array with files that requires each other or null
-     */
-    function findRequireLoop(diObject) {
-        var curFileName = diObject.fileName.toSassFormat(),
-            curRequires = diObject.requires;
-
-        for (var dIndex = diList.length - 1; dIndex >= 0; dIndex--) {
-            var diFileName = diList[dIndex].fileName.toSassFormat(),
-                diRequires = diList[dIndex].requires;
-
-            if (diFileName.match(curRequires) !== null &&
-                curFileName.match(diRequires) !== null) {
-                return {
-                    currentFile: diObject.fileName,
-                    foundedFile: diList[dIndex].fileName
-                };
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Search for given path formatted as sass path in files list
-     * and removes it form list if found
-     *
-     * @param fileList {array} list of paths to be search in
-     * @param sassPath {string} sass path to search for
-     * @returns {array} list of paths
-     */
-    function removeArrayItemByPath(fileList, sassPath) {
-        var index = -1,
-            seek  = true;
-
-        while (seek) {
-            index++;
-
-            if (fileList[index].toSassFormat().match(sassPath) !== null) {
-               fileList.splice(index, 1);
-            }
-
-            if (index >= fileList.length - 1) {
-                seek = false;
-            }
-        }
-
-        return fileList;
-    }
-
-    /**
-     * Returns array of all dependencies for a given file.
-     * If there is no DI for a given file, returns empty array.
-     *
-     * @param fileName {string} file name for which DIs must be returned
-     * @returns {Array} list of all dependencies for a file
-     */
-    function getDIByFilename(fileName) {
-        var returnArray     = [],
-            length          = diList.length;
-
-        for (var i = 0; i < length; i++) {
-            if (diList[i]['fileName'] === fileName) {
-                returnArray.push(diList[i]['requires']);
-            }
-        }
-        return returnArray;
-    }
-
-    /**
-     * Search for specific DI Object in DI List.
-     * Method returns index position when DI object
-     * exists in array or '-1' when its not found.
-     *
-     * @param DIObject {object} DI object to find
-     * @returns {number} index of DI object in diList, -1 if not found
-     */
-    function searchObjectInDI(DIObject) {
-        for (var i = diList.length - 1; i >= 0; i--) {
-            if (diList[i].requires === DIObject.requires &&
-                diList[i].fileName === DIObject.fileName)
-                return i;
-        }
-        return -1;
-    }
-
-    /**
-     * Search for path in list. Path should be sass formated.
-     * Use toSassFormat prototyped method to format path.
-     *
-     * @param sassPath {string} sass formated path
-     * @param fileList {array} list of files
-     * @returns {number} index of file in given file list, -1 if not found
-     */
-    function searchInList(sassPath, fileList) {
-        for (var i = fileList.length - 1; i >= 0; i--) {
-            //grunt.log.writeln(fileList[i].toSassFormat().match(sassPath));
-            if (fileList[i].toSassFormat().match(sassPath) !== null) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * Parses all the files in given file list.
-     * It cleans file list from files which are already
-     * being imported and stores DI list into global array (diList).
-     *
-     * @param fileList {array} list of files to be parsed
-     * @returns {array} parsed file list
-     */
-    function parseFiles(fileList) {
-        var doPass = true;
-
-        while (doPass) {
-            doPass = false;
-
-            for (var fIndex = 0; fIndex < fileList.length; fIndex++) {
-                // get import values from file as an array and add DI
-                // values to the diList array.
-                var curLength   = fileList.length,
-                    kValues     = getKeywordsValues(options.importKeyword,
-                                                    options.requireKeyword,
-                                                    fileList[fIndex]);
-
-                for (var kIndex = kValues.length - 1; kIndex >= 0; kIndex--) {
-                    fileList = removeArrayItemByPath(fileList, kValues[kIndex]);
-                    // Check if size of an array has changed
-                    if (curLength > fileList.length) {
-                        doPass = true;
-                    }
-                }
-
-            } // end for
-        } // end while
-
-        return fileList;
-    }
-
-    /**
-     * Reorders files in a given list by their dependencies.
-     * Dependencies are taken from diList which has to be
+     * Reorders partials in a given list by their dependencies.
+     * Dependencies are taken from mainPartialList which has to be
      * generated first.
      *
-     * @param fileList {array} list of files
-     * @returns {array} list of files
+     * @param partialsArray {array} array of sass/scss partials
+     * @returns {array} reordered array of partials
      */
-    function orderByDependency(fileList) {
-        var doPass = true;
-
-        // repeat sorting operation untill
+    function orderByDependency(partialsArray) {
+        var _doPass          = true,
+            _reqCache        = {};
+        // repeat sorting operation until
         // there is no replacing procedure during
         // one pass (bubble sorting).
-        while (doPass) {
-            doPass = false;
-
-            // Iterate through every file in the list and check its
+        while (_doPass) {
+            _doPass = false;
+            // Iterate through every partial in the list and check its
             // dependency (requirements)
-            for (var fIndex = fileList.length - 1; fIndex >= 0; fIndex--) {
-                // Get all dependencies for current file
-                var dependencies = getDIByFilename(fileList[fIndex]);
+            partialsArray.forEach(function(partialName, partialIndex) {
+                var _requiredObject = mainPartialList[partialName].requires;
 
-                if (dependencies.length > 0) {
+                for (var rKey in _requiredObject)
+                {
+                    if (_requiredObject.hasOwnProperty(rKey))
+                    {
+                        var _cacheFilename = mainPartialList[partialName].removedRoot,
+                            _requiredIndex = findIndexInArray(partialsArray, function(partialName){
+                                return (partialName.match(_requiredObject[rKey].requires) !== null);
+                            });
 
-                    // for each file that is required by current file
-                    for (var diIndex = 0; diIndex < dependencies.length; diIndex++) {
-                        var requires        = dependencies[diIndex],
-                            reqFileindex    = searchInList(requires, fileList);
-
-                        if (reqFileindex > -1 && reqFileindex < fIndex) {
-                            // Remove file from current index and insert
-                            // it before file that requires this file.
-                            fileList.replace(reqFileindex, fIndex);
-                            // Replacing procedure occured so do one more pass.
-                            doPass = true;
+                        if (_reqCache[_requiredObject[rKey].requires + _cacheFilename]) {
+                            // require loop detected, throw an error and break program
+                            grunt.fail.fatal(
+                                'Require loop detected!!! \nFiles that have require loop: \n' +
+                                mainPartialList[partialsArray[_requiredIndex]].fileName + '\n' +
+                                _requiredObject[rKey].fileName
+                            );
                         }
 
-                    } // end for
+                        if (_requiredIndex > -1 && _requiredIndex > partialIndex) {
+                            // Remove partial from current index and insert
+                            // it before partial that requires it.
+                            partialsArray = replaceInArray(partialsArray, _requiredIndex, partialIndex);
+                            // Replacing procedure occured so do one more pass.
+                            _doPass = true;
+                            // add requirement to cache for requirement loop handling
+                            _reqCache[_cacheFilename + _requiredObject[rKey].requires] = true;
+                        } else  if (_requiredIndex === -1) {
+                            // invalid requirement, throw a warning
+                            grunt.log.warn(
+                                'File: ' + mainPartialList[partialName].fileName +
+                                ' is depending on non existing partial "' +
+                                _requiredObject[rKey].requires +'"'
+                            );
+                        }
 
-                } // end if
-            } // end for
+                    } // end if
+                } // end for
+            }); // end for each
         } // end while
-
         // Return reordered file list
-        return fileList;
+        return partialsArray;
     }
 
     /**
      * Generate content for bootstrap file
      *
-     * @param fileList {array} list of files to import by bootstrap file
+     * @param partialsArray {array} list of partials to import by bootstrap file
      * @param lineDelimiter {string} symbol at the end of the line
      * @returns {string} formatted file content
      */
-    function generateBootstrapContent(fileList, lineDelimiter) {
-        var bootstrapContent    = '',
-            folderGroup         = '';
+    function generateBootstrapContent(partialsArray, lineDelimiter) {
+        var _bootstrapContent    = '',
+            _folderGroup         = '';
 
-        for (var fIndex = fileList.length - 1; fIndex >= 0; fIndex--) {
-            var filePath = fileList[fIndex];
-
-            // remove root paths
-            for (var rpIndex = 0; rpIndex < options.filterRootPaths.length; rpIndex++) {
-                var rootPath = options.filterRootPaths[rpIndex];
-                // check if path ends by path separator. If not append path separator to path.
-                if(rootPath.substr(-1) != pathSeparator) {
-                    rootPath += pathSeparator;
-                }
-                filePath = filePath.replace(rootPath, '');
-            }
-
-            // convert file path to sass format
-            filePath        = filePath.toSassFormat();
-            var currentRoot = filePath.parseRootFolder();
+        partialsArray.forEach(function(partialName) {
+            var _sassPath    = mainPartialList[partialName].removedRoot.toSassFormat(),
+                _currentRoot = _sassPath.parseRootFolder();
 
             // if current root folder has changed, write new root folder
             // as a comment and set new current folder
-            if (folderGroup != currentRoot) {
-                bootstrapContent   += newLineSymbol + '// ' + currentRoot + newLineSymbol;
-                folderGroup         = currentRoot;
+            if (_folderGroup != _currentRoot) {
+                _bootstrapContent   += NEW_LINE + '// ' + _currentRoot + NEW_LINE;
+                _folderGroup         = _currentRoot;
             }
-
             // append import line
-            bootstrapContent += options.importKeyword + ' "' + filePath + '"' + lineDelimiter + newLineSymbol;
-        }
+            _bootstrapContent += options.importKeyword + ' "' + _sassPath + '"' + lineDelimiter + NEW_LINE;
+        });
 
-        return bootstrapContent;
+        return _bootstrapContent;
     }
 
-    grunt.registerMultiTask('sass_bootstrapper', 'Resolves dependency for SASS files and creates bootstrap file', function() {
+    /**
+     * Grunt task main function
+     */
+    grunt.registerMultiTask(MODULE_NAME, MODULE_DESC, function() {
+
         // Merge task-specific and/or target-specific options with these defaults.
         options = this.options({
             filterRootPaths:    ['app/styles/', 'bower_components/'],
@@ -361,12 +298,15 @@ module.exports = function(grunt) {
             requireKeyword:     '#requires'
         });
 
-        var fileList            = [],
-            lineDelimiter       = ';',
-            bootstrapContent    = '// This file has been generated by grunt-sass-bootstrapper. \n' +
-                                  '// A SASS/SCSS Dependency resolver module.\n';
+        var _lineDelimiter       = ';',
+            _bootstrapContent    = '// This file has been generated by grunt-sass-bootstrapper. \n' +
+                '// A SASS/SCSS Dependency resolver module.\n\n' +
+                '// Please do not edit this file!\n',
+            _cachedPartialList   = {},
+            _parsingCount        = 0;
 
-        options.importKeyword = '@import';
+        options.importKeyword   = '@import';
+        options.cacheFile       = '.cache/'+MODULE_NAME+'/cache.json';
 
         if (options.importKeyword === options.requireKeyword) {
             grunt.fail.fatal('Using "@import" as requireKeyword name is depracated');
@@ -374,43 +314,90 @@ module.exports = function(grunt) {
 
         // If output file is sass, clear line delimiter.
         if (Path.extname(options.bootstrapFile) === '.sass') {
-            lineDelimiter = '';
+            _lineDelimiter = '';
+        }
+
+        // Try to read cache file
+        if (grunt.file.exists(options.cacheFile)) {
+            _cachedPartialList = grunt.file.readJSON(options.cacheFile);
+        }
+
+        if (grunt.file.exists(options.bootstrapFile)) {
+            grunt.file.delete(options.bootstrapFile);
+            grunt.log.writeln('File "' + options.bootstrapFile + '" deleted.');
         }
 
         // Iterate over all specified file groups.
-        this.files.forEach(function(f) {
-
-            if (grunt.file.exists(options.bootstrapFile)) {
-                grunt.file.delete(options.bootstrapFile);
-                grunt.log.writeln('File "' + options.bootstrapFile + '" deleted.');
-            }
+        this.files.forEach(function(fGroup) {
 
             // Insert all files into array.
-            f.src.filter(function(filePath) {
+            fGroup.src.filter(function(filePath) {
                 // Warn on and remove invalid source files (if nonull was set).
                 if (!grunt.file.exists(filePath)) {
                     grunt.log.warn('Source file "' + filePath + '" not found.');
                     return false;
                 } else {
+                    var _noExtension    = filePath.replace(Path.extname(filePath), ''),
+                        _cachedPartial  = _cachedPartialList[_noExtension],
+                        _doParse        = true,
+                        _partialObject  = {
+                            lastModified:   new Date(Fs.lstatSync(filePath).mtime).getTime(),
+                            fileName:       filePath,
+                            imports: {},
+                            requires: {}
+                        };
+
+                    // check if cached data for current file exists
+                    if (typeof _cachedPartial !== 'undefined') {
+                        // current file is cached
+                        // compare last modification date
+                        if (_cachedPartial.lastModified === _partialObject.lastModified) {
+                            // file hasn't been modified since last build
+                            // load file data from cache
+                            _partialObject.imports      = _cachedPartial.imports;
+                            _partialObject.requires     = _cachedPartial.requires;
+                            _partialObject.removedRoot  = _cachedPartial.removedRoot;
+                            // disable parsing for current file
+                            _doParse                    = false;
+                        }
+                    }
+
+                    if (_doParse) {
+                        // Parse file
+                        var _parsedData = parseFile(options.importKeyword, options.requireKeyword, filePath);
+                        // collect imports and requirements
+                        _partialObject.imports  = _parsedData.imports;
+                        _partialObject.requires = _parsedData.requires;
+                        _parsingCount++;
+                        // Remove root paths
+                        _partialObject.removedRoot = _noExtension.removeRootFolders(options.filterRootPaths);
+                    }
+
+                    // Append new element to main partials list
+                    mainPartialList[_noExtension] = _partialObject;
+
                     return true;
                 }
-            }).map(function(filePath) {
-                // Add file path to the list.
-                fileList.unshift(filePath);
-                return true;
             });
 
-            // Parse imports and DIs and order file by their dependency
-            fileList = orderByDependency(parseFiles(fileList));
-
-            bootstrapContent += generateBootstrapContent(fileList, lineDelimiter);
-
-            // Write the destination file.
-            grunt.file.write(options.bootstrapFile, bootstrapContent);
-
-            // Print a success message.
-            grunt.log.writeln('File "' + options.bootstrapFile + '" created.');
         });
-    });
 
+        if (_parsingCount !== 0) {
+            grunt.file.write(options.cacheFile, JSON.stringify(mainPartialList, null, 4));
+        }
+
+        clearImports(mainPartialList);
+        var _orderedPartialsArray = orderByDependency(getArrayOfPartials());
+
+        _bootstrapContent += generateBootstrapContent(_orderedPartialsArray, _lineDelimiter);
+
+        // Write the destination file.
+        grunt.file.write(options.bootstrapFile, _bootstrapContent);
+
+        // Print a success message.
+        grunt.log.writeln('File "' + options.bootstrapFile + '" created.');
+
+
+
+    });
 };
