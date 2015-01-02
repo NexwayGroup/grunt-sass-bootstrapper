@@ -1,7 +1,7 @@
 {
   "name": "grunt-sass-bootstrapper",
   "description": "Resolves dependency for SASS files and creates bootstrap file",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "homepage": "https://github.com/NexwayGroup/grunt-sass-bootstrapper",
   "author": {
     "name": "Michal Katanski",
