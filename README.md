@@ -18,7 +18,7 @@ and `_variables.scss` is being imported by `_mixins.scss`, the output file (boot
 @import "partials/mixins"
 ```
 
-However if we add a `// #required "partials/mixins"` to the `main.scss` file the order of imports will change to the:
+However if we add a `// #requires "partials/mixins"` to the `main.scss` file the order of imports will change to the:
 ```
 @import "partials/mixins"
 @import "main"
@@ -77,6 +77,16 @@ Default value: `#requires`
 
 Module will look for this keyword in sass/scss files to create dependency. Pass the name of required file in quotes after keyword. For example: `// #requires "variables/fonts"`
 Value should have same format as value of sass/scss `@import`. Place require keyword as a comment otherwise SASS compiler will throw an error.
+
+#### options.exclude
+Type: `Array`
+Default value: `[]`
+
+List of files that will be excluded from output file. You can use globbing pattern to match more than one file in path.
+For example you can setup `exclude: ['app/styles/excluded/**/*.sass']` to ignore all sass files in `app/styles/excluded` folder and its sub-folders.
+
+**Note that partials that are being imported by excluded files can be used in bootstrap file.**
+
 
 ### Usage Examples
 

@@ -308,7 +308,7 @@ module.exports = function (grunt) {
             filterRootPaths:    ['app/styles/', 'bower_components/'],
             bootstrapFile:      'app/styles/bootstrap.sass',
             requireKeyword:     '#requires',
-            exclude: []
+            exclude:            []
         });
 
         var _lineDelimiter      =   ';',
@@ -339,6 +339,9 @@ module.exports = function (grunt) {
             grunt.file.delete(options.bootstrapFile);
             grunt.log.writeln('File "' + options.bootstrapFile + '" deleted.');
         }
+
+        // Expand list of excluded files
+        options.exclude = grunt.file.expand(options.exclude);
 
         // Iterate over all specified file groups.
         this.files.forEach(function (fGroup) {
