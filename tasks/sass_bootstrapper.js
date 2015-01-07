@@ -282,8 +282,21 @@ module.exports = function (grunt) {
             _folderGroup        = '';
 
         partialsArray.forEach(function (partialName) {
-            var _sassPath = mainPartialList[partialName].removedRoot.toSassFormat(),
+            var _sassPath = mainPartialList[partialName].removedRoot,
                 _currentRoot = _sassPath.parseRootFolder();
+
+            if (options.useRelativePaths) {
+                // if useRelativePaths option is set to true the result file will use paths relative to bootstrap file
+                // in this case filterRootPaths option is not used
+                _sassPath = Path.relative(Path.dirname(options.bootstrapFile),
+                                            mainPartialList[partialName].fileName.toSassFormat());
+                // remove file extension
+                _sassPath = _sassPath.replace(Path.extname(_sassPath), '');
+                // Windows support. Replace backslashes into slashes.
+                _sassPath = _sassPath.replace(/\\/g, "/");
+            } else {
+                _sassPath = _sassPath.toSassFormat();
+            }
 
             // if current root folder has changed, write new root folder
             // as a comment and set new current folder
@@ -308,6 +321,7 @@ module.exports = function (grunt) {
             filterRootPaths:    ['app/styles/', 'bower_components/'],
             bootstrapFile:      'app/styles/bootstrap.sass',
             requireKeyword:     '#requires',
+            useRelativePaths:   false,
             exclude:            []
         });
 

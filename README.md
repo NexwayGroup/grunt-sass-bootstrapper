@@ -87,6 +87,14 @@ For example you can setup `exclude: ['app/styles/excluded/**/*.sass']` to ignore
 
 **Note that partials that are being imported by excluded files can be used in bootstrap file.**
 
+#### options.useRelativePaths
+Type: `bool`
+Default value: `false`
+
+By default paths to SASS/SCSS partials inside bootstrap file are relative to project root folder (without parts that are removed by `options.filterRootPaths`).
+If this value is set to true, those paths will be relative to bootstrap file and `options.filterRootPaths` is not used by plugin.
+
+
 
 ### Usage Examples
 
